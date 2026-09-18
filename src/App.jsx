@@ -81,57 +81,75 @@ const STAGES = [
 ];
 
 export default function App() {
-  const [progress, setProgress] = useState(0.00);
   const [currentStageIdx, setCurrentStageIdx] = useState(0);
 
   const progressRef = useRef(0.00);
   const targetProgressRef = useRef(0.00);
+  const currentStageIdxRef = useRef(0);
   const heroTextRef = useRef(null);
 
-  // Update active stage when progress changes
+  // GSAP smooth text entry animation on stage transition
   useEffect(() => {
-    const idx = STAGES.findIndex(s => progress >= s.progressStart && progress <= s.progressEnd);
-    if (idx !== -1 && idx !== currentStageIdx) {
-      setCurrentStageIdx(idx);
-
-      // GSAP smooth text entry animation on stage transition
-      if (heroTextRef.current) {
-        gsap.fromTo(
-          heroTextRef.current,
-          { opacity: 0, y: 24, scale: 0.97 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'power3.out', overwrite: 'auto' }
-        );
-      }
+    if (heroTextRef.current) {
+      gsap.fromTo(
+        heroTextRef.current,
+        { opacity: 0, y: 24, scale: 0.97 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'power3.out', overwrite: 'auto' }
+      );
     }
-  }, [progress, currentStageIdx]);
+  }, [currentStageIdx]);
 
-  // Global mouse wheel listener for GSAP smooth scroll move scrubbing
+  // Global wheel, touch, and key listeners for ultra-fluid 60fps scrolling
   useEffect(() => {
     const handleWheel = (e) => {
       e.preventDefault();
-      // Delta factor for fluid scroll move
-      const delta = e.deltaY * 0.00035;
-      let nextP = targetProgressRef.current + delta;
+      let deltaY = e.deltaY;
+      if (e.deltaMode === 1) deltaY *= 32; // Line mode
+      else if (e.deltaMode === 2) deltaY *= 320; // Page mode
+
+      // Clamp single wheel event delta for ultra-smooth responsiveness across trackpad and mouse wheel
+      const clampedDelta = Math.sign(deltaY) * Math.min(Math.abs(deltaY), 120);
+      const step = clampedDelta * 0.00028;
+
+      let nextP = targetProgressRef.current + step;
       if (nextP < 0) nextP = 0;
       if (nextP > 1) nextP = 1;
       targetProgressRef.current = nextP;
     };
 
-    // Touch swipe support for mobile
     let touchStartY = 0;
+    let touchLastY = 0;
     const handleTouchStart = (e) => {
       if (e.touches.length === 1) {
         touchStartY = e.touches[0].clientY;
+        touchLastY = touchStartY;
       }
     };
 
     const handleTouchMove = (e) => {
       if (e.touches.length === 1) {
         const touchY = e.touches[0].clientY;
-        const deltaY = (touchStartY - touchY) * 0.001;
-        touchStartY = touchY;
+        const deltaY = touchLastY - touchY;
+        touchLastY = touchY;
 
-        let nextP = targetProgressRef.current + deltaY;
+        let nextP = targetProgressRef.current + deltaY * 0.0012;
+        if (nextP < 0) nextP = 0;
+        if (nextP > 1) nextP = 1;
+        targetProgressRef.current = nextP;
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      let step = 0;
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') step = 0.05;
+      else if (e.key === 'ArrowUp' || e.key === 'PageUp') step = -0.05;
+      else if (e.key === ' ') step = e.shiftKey ? -0.1 : 0.1;
+      else if (e.key === 'Home') targetProgressRef.current = 0;
+      else if (e.key === 'End') targetProgressRef.current = 1;
+
+      if (step !== 0) {
+        e.preventDefault();
+        let nextP = targetProgressRef.current + step;
         if (nextP < 0) nextP = 0;
         if (nextP > 1) nextP = 1;
         targetProgressRef.current = nextP;
@@ -141,22 +159,38 @@ export default function App() {
     window.addEventListener('wheel', handleWheel, { passive: false });
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
-  // GSAP Ticker driven smooth lerp loop for ultra-fluid 60fps frame scrubbing
+  // GSAP Ticker driven framerate-independent lerp loop
   useEffect(() => {
+    let lastTime = performance.now();
+
     const updateProgress = () => {
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
       const diff = targetProgressRef.current - progressRef.current;
-      if (Math.abs(diff) > 0.00005) {
-        // Ultra smooth exponential lerp
-        progressRef.current += diff * 0.09;
-        setProgress(progressRef.current);
+      if (Math.abs(diff) > 0.00001) {
+        // Smooth exponential lerp (60fps to 144fps screen adaptive)
+        const lerpFactor = 1 - Math.exp(-14 * dt);
+        progressRef.current += diff * lerpFactor;
+
+        // Update active stage index only when stage boundaries are crossed
+        const currentP = progressRef.current;
+        const idx = STAGES.findIndex(s => currentP >= s.progressStart && currentP <= s.progressEnd);
+        if (idx !== -1 && idx !== currentStageIdxRef.current) {
+          currentStageIdxRef.current = idx;
+          setCurrentStageIdx(idx);
+        }
       }
     };
 
@@ -170,7 +204,7 @@ export default function App() {
   const jumpToStage = (idx) => {
     const stage = STAGES[idx];
     const targetP = (stage.progressStart + stage.progressEnd) / 2;
-    
+
     gsap.to(targetProgressRef, {
       current: targetP,
       duration: 0.8,
@@ -237,11 +271,11 @@ export default function App() {
 
         {/* FRAME CANVAS VIEWPORT CONTAINER */}
         <div className="card-viewport-container">
-          <FrameCanvas progress={progress} />
+          <FrameCanvas progressRef={progressRef} />
 
           {/* DYNAMIC TEXT OVERLAYS BASED ON TEXT ANALYSIS */}
           <div className={`card-stage-overlay ${activeStage.positionClass}`}>
-            {progress < 0.83 && (
+            {currentStageIdx < 5 && (
               <div className="card-hero-text" ref={heroTextRef}>
                 <div className="hero-badge-pill">
                   <span className="badge-pulse-dot" />
@@ -268,7 +302,7 @@ export default function App() {
             )}
 
             {/* STAGE 6: WEB3 SAAS DASHBOARD CLIMAX */}
-            {progress >= 0.83 && (
+            {currentStageIdx === 5 && (
               <div className="card-dashboard-wrapper">
                 <DashboardClimax />
               </div>
@@ -279,3 +313,4 @@ export default function App() {
     </div>
   );
 }
+

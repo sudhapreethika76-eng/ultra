@@ -64,16 +64,18 @@ html, body {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   width: 135vw;
   height: 135vh;
   background: 
     radial-gradient(circle at 30% 25%, rgba(124, 58, 237, 0.24) 0%, transparent 60%),
     radial-gradient(circle at 70% 75%, rgba(255, 0, 127, 0.16) 0%, transparent 60%),
     radial-gradient(circle at 50% 50%, rgba(0, 212, 255, 0.08) 0%, transparent 70%);
-  filter: blur(90px);
+  filter: blur(80px);
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
+  contain: strict;
 }
 
 /* --- FULL DESKTOP CONTAINER --- */
@@ -92,6 +94,7 @@ html, body {
   overflow: hidden;
   backdrop-filter: blur(24px);
   z-index: 10;
+  contain: layout style paint;
 }
 
 /* --- SIMPLE TOP NAV --- */
@@ -186,6 +189,8 @@ html, body {
   width: 100%;
   height: 100%;
   z-index: 1;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .frame-canvas-mount canvas {
@@ -206,6 +211,8 @@ html, body {
   pointer-events: none;
   display: flex;
   transition: all 0.5s ease-out;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 .card-stage-overlay * {
